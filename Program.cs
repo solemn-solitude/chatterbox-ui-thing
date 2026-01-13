@@ -22,6 +22,11 @@ builder.Services.Configure<ChatterboxConfig>(config =>
 builder.Services.AddScoped<ChatterboxService>();
 
 var app = builder.Build();
+app.UsePathBase("/tts-ui");
+
+app.UseStaticFiles();
+app.UseRouting();
+
 
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
@@ -30,7 +35,15 @@ if (!app.Environment.IsDevelopment())
     // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
     app.UseHsts();
 }
-app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
+//app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
+
+app.UseWhen(
+    ctx => !ctx.Request.Path.StartsWithSegments("/_framework")
+           && !ctx.Request.Path.Value!.Contains('.'),
+    appBuilder =>
+    {
+        appBuilder.UseStatusCodePagesWithReExecute("/not-found");
+    });
 
 // Don't use HTTPS redirection since we're using HTTP
 // app.UseHttpsRedirection();
