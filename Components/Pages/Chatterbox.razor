@@ -152,7 +152,13 @@
                             else
                             {
                                 <label class="form-label">Cloned Voice</label>
-                                <input type="text" class="form-control" @bind="selectedVoiceId" placeholder="Select from list" readonly />
+                                <select class="form-select" @bind="selectedVoiceId">
+                                    <option value="">-- Select a voice --</option>
+                                    @foreach (var voice in voices)
+                                    {
+                                        <option value="@voice.VoiceId">@voice.VoiceId</option>
+                                    }
+                                </select>
                             }
                         </div>
                     </div>
@@ -184,9 +190,12 @@
                                 <div class="card-body">
                                     <h6><i class="bi bi-music-note-beamed"></i> Audio Ready</h6>
                                     <p class="mb-2">Size: @((audioData.Length / 1024.0).ToString("F2")) KB</p>
-                                    <audio id="audioPlayer" controls class="w-100">
+                                    <audio id="audioPlayer" controls class="w-100 mb-3">
                                         Your browser does not support the audio element.
                                     </audio>
+                                    <button class="btn btn-success w-100" @onclick="DownloadAudioAsync">
+                                        <i class="bi bi-download"></i> Download Audio
+                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -234,10 +243,13 @@
         isLoadingVoices = true;
         try
         {
+            AppLogger.Instance.Log("Chatterbox.razor", "RefreshVoicesAsync called");
             voices = await ChatterboxService.ListVoicesAsync();
+            AppLogger.Instance.Log("Chatterbox.razor", $"Successfully loaded {voices.Count} voices");
         }
         catch (Exception ex)
         {
+            AppLogger.Instance.LogError("Chatterbox.razor", "Error in RefreshVoicesAsync", ex);
             synthesisMessage = $"Error loading voices: {ex.Message}";
             synthesisSuccess = false;
         }
@@ -284,8 +296,9 @@
             synthesisMessage = $"Successfully synthesized {audioData.Length} bytes of audio!";
             synthesisSuccess = true;
 
-            // Play audio
-            await Task.Delay(100); // Small delay to ensure UI updates
+            // Force UI update first, then play audio
+            StateHasChanged();
+            await Task.Delay(200); // Wait for DOM to render the audio element
             await PlayAudioAsync(audioData);
         }
         catch (Exception ex)
@@ -304,7 +317,7 @@
         try
         {
             var base64 = Convert.ToBase64String(audio);
-            await JS.InvokeVoidAsync("playPCMAudio", base64, 24000);
+            await JS.InvokeVoidAsync("playWAVAudio", base64);
         }
         catch (Exception ex)
         {
@@ -432,6 +445,22 @@
         {
             isRecording = false;
             await JS.InvokeVoidAsync("alert", $"Error stopping recording: {ex.Message}");
+        }
+    }
+
+    private async Task DownloadAudioAsync()
+    {
+        if (audioData == null || audioData.Length == 0) return;
+
+        try
+        {
+            var base64 = Convert.ToBase64String(audioData);
+            var fileName = $"tts_audio_{DateTime.Now:yyyyMMdd_HHmmss}.wav";
+            await JS.InvokeVoidAsync("downloadAudio", base64, fileName);
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("alert", $"Error downloading audio: {ex.Message}");
         }
     }
 }

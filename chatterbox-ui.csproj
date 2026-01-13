@@ -11,6 +11,9 @@
   <ItemGroup>
     <PackageReference Include="DotNetEnv" Version="3.1.1" />
   </ItemGroup>
+  <ItemGroup>
+    <Compile Remove="lib/chatterbox-inference-client-csharp-bindings/**/*.cs" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="lib/chatterbox-inference-client-csharp-bindings/chatterbox-inference-client-csharp-bindings.csproj" />

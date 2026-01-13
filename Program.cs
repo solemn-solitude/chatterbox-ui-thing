@@ -31,7 +31,9 @@ if (!app.Environment.IsDevelopment())
     app.UseHsts();
 }
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
-app.UseHttpsRedirection();
+
+// Don't use HTTPS redirection since we're using HTTP
+// app.UseHttpsRedirection();
 
 app.UseAntiforgery();
 

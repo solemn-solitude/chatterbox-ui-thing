@@ -1,4 +1,60 @@
-// PCM Audio Playback for Chatterbox TTS
+// WAV Audio Playback for Chatterbox TTS
+window.playWAVAudio = function (base64Audio) {
+    console.log('playWAVAudio called, data length:', base64Audio.length);
+
+    const audioBytes = Uint8Array.from(atob(base64Audio), c => c.charCodeAt(0));
+    console.log('Decoded audio bytes:', audioBytes.length);
+
+    const blob = new Blob([audioBytes], { type: 'audio/wav' });
+    console.log('Created blob, size:', blob.size, 'type:', blob.type);
+
+    const audioUrl = URL.createObjectURL(blob);
+    console.log('Created object URL:', audioUrl);
+
+    // Update audio element for download/replay
+    const audioElement = document.getElementById('audioPlayer');
+    if (audioElement) {
+        console.log('Found audio element');
+
+        // Set up event listeners for debugging
+        audioElement.onloadedmetadata = () => console.log('Audio metadata loaded, duration:', audioElement.duration);
+        audioElement.oncanplay = () => console.log('Audio can play');
+        audioElement.onerror = (e) => console.error('Audio error:', e, audioElement.error);
+        audioElement.onloadstart = () => console.log('Audio load started');
+        audioElement.onloadeddata = () => console.log('Audio data loaded');
+
+        audioElement.src = audioUrl;
+        audioElement.load(); // Explicitly load the audio
+
+        // Try to play after a brief moment
+        setTimeout(() => {
+            audioElement.play()
+                .then(() => console.log('Audio playback started'))
+                .catch(e => console.error('Error playing audio:', e));
+        }, 100);
+    } else {
+        console.error('Audio element not found!');
+    }
+};
+
+// Download Audio File
+window.downloadAudio = function (base64Audio, filename) {
+    const audioBytes = Uint8Array.from(atob(base64Audio), c => c.charCodeAt(0));
+    const blob = new Blob([audioBytes], { type: 'audio/wav' });
+    const url = URL.createObjectURL(blob);
+
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    // Clean up the URL
+    setTimeout(() => URL.revokeObjectURL(url), 100);
+};
+
+// PCM Audio Playback for Chatterbox TTS (legacy)
 window.playPCMAudio = function (base64Audio, sampleRate) {
     const audioContext = new (window.AudioContext || window.webkitAudioContext)();
     const audioBytes = Uint8Array.from(atob(base64Audio), c => c.charCodeAt(0));
