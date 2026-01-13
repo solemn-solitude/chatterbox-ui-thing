@@ -1,0 +1,3 @@
+[submodule "lib/chatterbox-inference-client-csharp-bindings"]
+	path = lib/chatterbox-inference-client-csharp-bindings
+	url = https://github.com/solemn-solitude/chatterbox-inference-client-csharp-bindings

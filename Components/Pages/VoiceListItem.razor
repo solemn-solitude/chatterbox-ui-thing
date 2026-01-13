@@ -1,0 +1,36 @@
+@using chatterbox_ui.Services
+
+<div class="list-group-item @(IsSelected ? "active" : "")" style="cursor: pointer;" @onclick="HandleSelect">
+    <div class="d-flex w-100 justify-content-between">
+        <h6 class="mb-1">@Voice.VoiceId</h6>
+        <button class="btn btn-sm btn-danger" @onclick:stopPropagation="true" @onclick="HandleDelete">
+            <i class="bi bi-trash"></i>
+        </button>
+    </div>
+    <small>Sample Rate: @Voice.SampleRate Hz</small><br/>
+    <small class="text-muted">Created: @Voice.CreatedAt</small>
+</div>
+
+@code {
+    [Parameter]
+    public VoiceInfo Voice { get; set; } = new();
+    
+    [Parameter]
+    public bool IsSelected { get; set; }
+    
+    [Parameter]
+    public EventCallback<string> OnSelect { get; set; }
+    
+    [Parameter]
+    public EventCallback<string> OnDelete { get; set; }
+
+    private async Task HandleSelect()
+    {
+        await OnSelect.InvokeAsync(Voice.VoiceId);
+    }
+
+    private async Task HandleDelete()
+    {
+        await OnDelete.InvokeAsync(Voice.VoiceId);
+    }
+}
