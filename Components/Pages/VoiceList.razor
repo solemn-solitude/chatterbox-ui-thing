@@ -1,0 +1,110 @@
+@using chatterbox_ui.Services
+@inject ChatterboxService ChatterboxService
+@inject IJSRuntime JS
+
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">Available Voices</h5>
+        <button class="btn btn-sm btn-primary" @onclick="RefreshVoicesAsync">
+            <i class="bi bi-arrow-clockwise"></i> Refresh
+        </button>
+    </div>
+    <div class="card-body">
+        @if (isLoadingVoices)
+        {
+            <div class="text-center">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+            </div>
+        }
+        else if (Voices.Any())
+        {
+            <div class="list-group">
+                @foreach (var voice in Voices)
+                {
+                    var currentVoice = voice;
+                    var isActive = SelectedVoiceId == currentVoice.VoiceId;
+                    <div class="list-group-item @(isActive ? "active" : "")" style="cursor: pointer;" @onclick="@(() => OnVoiceSelect.InvokeAsync(currentVoice.VoiceId))">
+                        <div class="d-flex w-100 justify-content-between">
+                            <h6 class="mb-1">@currentVoice.VoiceId</h6>
+                            <button class="btn btn-sm btn-danger" @onclick="@(async () => await HandleDeleteVoice(currentVoice.VoiceId))" @onclick:stopPropagation="true">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </div>
+                        <small>Sample Rate: @currentVoice.SampleRate Hz</small><br/>
+                        <small class="text-muted">Created: @currentVoice.CreatedAt</small>
+                    </div>
+                }
+            </div>
+        }
+        else
+        {
+            <p class="text-muted">No voices available. Upload one to get started!</p>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public List<chatterbox_ui.Services.VoiceInfo> Voices { get; set; } = new();
+
+    [Parameter]
+    public string? SelectedVoiceId { get; set; }
+
+    [Parameter]
+    public EventCallback<string> OnVoiceSelect { get; set; }
+
+    [Parameter]
+    public EventCallback OnVoicesChanged { get; set; }
+
+    private bool isLoadingVoices = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshVoicesAsync();
+    }
+
+    private async Task RefreshVoicesAsync()
+    {
+        isLoadingVoices = true;
+        try
+        {
+            AppLogger.Instance.Log("VoiceList", "RefreshVoicesAsync called");
+            Voices = await ChatterboxService.ListVoicesAsync();
+            AppLogger.Instance.Log("VoiceList", $"Successfully loaded {Voices.Count} voices");
+            await OnVoicesChanged.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            AppLogger.Instance.LogError("VoiceList", "Error in RefreshVoicesAsync", ex);
+        }
+        finally
+        {
+            isLoadingVoices = false;
+        }
+    }
+
+    private async Task HandleDeleteVoice(string voiceId)
+    {
+        if (!await JS.InvokeAsync<bool>("confirm", $"Are you sure you want to delete voice '{voiceId}'?"))
+            return;
+
+        try
+        {
+            var result = await ChatterboxService.DeleteVoiceAsync(voiceId);
+            if (result.Success)
+            {
+                await RefreshVoicesAsync();
+            }
+            else
+            {
+                await JS.InvokeVoidAsync("alert", result.Message);
+            }
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("alert", $"Error: {ex.Message}");
+        }
+    }
+}

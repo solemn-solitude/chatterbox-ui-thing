@@ -2,7 +2,6 @@
 @rendermode InteractiveServer
 @using chatterbox_ui.Services
 @inject ChatterboxService ChatterboxService
-@inject IJSRuntime JS
 
 <PageTitle>Chatterbox TTS</PageTitle>
 
@@ -10,457 +9,58 @@
 
 <div class="container-fluid mt-4">
     <div class="row">
-        <!-- Voice List -->
+        <!-- Voice List and Upload -->
         <div class="col-md-4">
-            <div class="card">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0">Available Voices</h5>
-                    <button class="btn btn-sm btn-primary" @onclick="RefreshVoicesAsync">
-                        <i class="bi bi-arrow-clockwise"></i> Refresh
-                    </button>
-                </div>
-                <div class="card-body">
-                    @if (isLoadingVoices)
-                    {
-                        <div class="text-center">
-                            <div class="spinner-border text-primary" role="status">
-                                <span class="visually-hidden">Loading...</span>
-                            </div>
-                        </div>
-                    }
-                    else if (voices.Any())
-                    {
-                        <div class="list-group">
-                            @foreach (var voice in voices)
-                            {
-                                var currentVoice = voice;
-                                var isActive = selectedVoiceId == currentVoice.VoiceId;
-                                <div class="list-group-item @(isActive ? "active" : "")" style="cursor: pointer;" @onclick="@(() => SelectVoice(currentVoice.VoiceId))">
-                                    <div class="d-flex w-100 justify-content-between">
-                                        <h6 class="mb-1">@currentVoice.VoiceId</h6>
-                                        <button class="btn btn-sm btn-danger" @onclick="@(async () => await HandleDeleteVoice(currentVoice.VoiceId))" @onclick:stopPropagation="true">
-                                            <i class="bi bi-trash"></i>
-                                        </button>
-                                    </div>
-                                    <small>Sample Rate: @currentVoice.SampleRate Hz</small><br/>
-                                    <small class="text-muted">Created: @currentVoice.CreatedAt</small>
-                                </div>
-                            }
-                        </div>
-                    }
-                    else
-                    {
-                        <p class="text-muted">No voices available. Upload one to get started!</p>
-                    }
-                </div>
-            </div>
-
-            <!-- Voice Upload -->
-            <div class="card mt-3">
-                <div class="card-header">
-                    <h5 class="mb-0">Upload Voice</h5>
-                </div>
-                <div class="card-body">
-                    <div class="mb-3">
-                        <label class="form-label">Voice ID</label>
-                        <input type="text" class="form-control" @bind="newVoiceId" placeholder="my-voice" />
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Audio File (WAV)</label>
-                        <div class="input-group">
-                            <InputFile class="form-control" accept=".wav" OnChange="OnFileSelected" />
-                            @if (!isRecording)
-                            {
-                                <button class="btn btn-outline-danger" type="button" @onclick="StartRecordingAsync">
-                                    <i class="bi bi-mic-fill"></i> Record
-                                </button>
-                            }
-                            else
-                            {
-                                <button class="btn btn-danger" type="button" @onclick="StopRecordingAsync">
-                                    <i class="bi bi-stop-circle-fill"></i> Stop
-                                </button>
-                            }
-                        </div>
-                        @if (isRecording)
-                        {
-                            <small class="text-danger"><i class="bi bi-record-circle-fill"></i> Recording...</small>
-                        }
-                        @if (!string.IsNullOrWhiteSpace(recordedFileName))
-                        {
-                            <small class="text-success"><i class="bi bi-check-circle-fill"></i> Recorded: @recordedFileName</small>
-                        }
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Sample Rate</label>
-                        <input type="number" class="form-control" @bind="sampleRate" placeholder="24000" />
-                    </div>
-                    <button class="btn btn-success w-100" @onclick="UploadVoiceAsync" disabled="@(isUploading || string.IsNullOrWhiteSpace(newVoiceId) || (selectedFile == null && recordedAudioData == null))">
-                        @if (isUploading)
-                        {
-                            <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-                            <span> Uploading...</span>
-                        }
-                        else
-                        {
-                            <i class="bi bi-upload"></i>
-                            <span> Upload Voice</span>
-                        }
-                    </button>
-                    @if (!string.IsNullOrWhiteSpace(uploadMessage))
-                    {
-                        <div class="alert @(uploadSuccess ? "alert-success" : "alert-danger") mt-2" role="alert">
-                            @uploadMessage
-                        </div>
-                    }
-                </div>
+            <VoiceList 
+                Voices="@voices" 
+                SelectedVoiceId="@selectedVoiceId"
+                OnVoiceSelect="@HandleVoiceSelect"
+                OnVoicesChanged="@HandleVoicesChanged" />
+            
+            <div class="mt-3">
+                <VoiceUpload OnUploadComplete="@HandleUploadComplete" />
             </div>
         </div>
 
         <!-- Synthesis & Playback -->
         <div class="col-md-8">
-            <div class="card">
-                <div class="card-header">
-                    <h5 class="mb-0">Text-to-Speech Synthesis</h5>
-                </div>
-                <div class="card-body">
-                    <div class="mb-3">
-                        <label class="form-label">Text to Synthesize</label>
-                        <textarea class="form-control" rows="4" @bind="textToSynthesize" placeholder="Enter text here..."></textarea>
-                    </div>
-                    
-                    <div class="row mb-3">
-                        <div class="col-md-6">
-                            <label class="form-label">Voice Mode</label>
-                            <select class="form-select" @bind="voiceMode">
-                                <option value="default">Default Voice</option>
-                                <option value="clone">Clone Voice</option>
-                            </select>
-                        </div>
-                        <div class="col-md-6">
-                            @if (voiceMode == "default")
-                            {
-                                <label class="form-label">Default Voice</label>
-                                <select class="form-select" @bind="defaultVoiceName">
-                                    <option value="af_sky">af_sky</option>
-                                    <option value="af">af</option>
-                                    <option value="am">am</option>
-                                    <option value="bf">bf</option>
-                                    <option value="bm">bm</option>
-                                </select>
-                            }
-                            else
-                            {
-                                <label class="form-label">Cloned Voice</label>
-                                <select class="form-select" @bind="selectedVoiceId">
-                                    <option value="">-- Select a voice --</option>
-                                    @foreach (var voice in voices)
-                                    {
-                                        <option value="@voice.VoiceId">@voice.VoiceId</option>
-                                    }
-                                </select>
-                            }
-                        </div>
-                    </div>
-
-                    <button class="btn btn-primary btn-lg w-100" @onclick="SynthesizeAsync" disabled="@(isSynthesizing || string.IsNullOrWhiteSpace(textToSynthesize))">
-                        @if (isSynthesizing)
-                        {
-                            <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-                            <span> Synthesizing...</span>
-                        }
-                        else
-                        {
-                            <i class="bi bi-play-circle"></i>
-                            <span> Synthesize & Play</span>
-                        }
-                    </button>
-
-                    @if (!string.IsNullOrWhiteSpace(synthesisMessage))
-                    {
-                        <div class="alert @(synthesisSuccess ? "alert-success" : "alert-danger") mt-3" role="alert">
-                            @synthesisMessage
-                        </div>
-                    }
-
-                    @if (audioData != null && audioData.Length > 0)
-                    {
-                        <div class="mt-3">
-                            <div class="card bg-light">
-                                <div class="card-body">
-                                    <h6><i class="bi bi-music-note-beamed"></i> Audio Ready</h6>
-                                    <p class="mb-2">Size: @((audioData.Length / 1024.0).ToString("F2")) KB</p>
-                                    <audio id="audioPlayer" controls class="w-100 mb-3">
-                                        Your browser does not support the audio element.
-                                    </audio>
-                                    <button class="btn btn-success w-100" @onclick="DownloadAudioAsync">
-                                        <i class="bi bi-download"></i> Download Audio
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    }
-                </div>
-            </div>
+            <SynthesisPanel 
+                Voices="@voices"
+                SelectedVoiceId="@selectedVoiceId"
+                OnVoiceIdChanged="@HandleVoiceIdChanged" />
         </div>
     </div>
 </div>
 
 @code {
-    private List<VoiceInfo> voices = new();
+    private List<chatterbox_ui.Services.VoiceInfo> voices = new();
     private string? selectedVoiceId;
-    private string textToSynthesize = "Hello, this is a test of the Chatterbox text to speech system.";
-    private string voiceMode = "default";
-    private string defaultVoiceName = "af_sky";
-    private byte[]? audioData;
-    
-    private bool isLoadingVoices = false;
-    private bool isSynthesizing = false;
-    private bool isUploading = false;
-    
-    private string? uploadMessage;
-    private bool uploadSuccess = false;
-    private string? synthesisMessage;
-    private bool synthesisSuccess = false;
-    
-    // Upload fields
-    private string newVoiceId = "";
-    private int sampleRate = 24000;
-    private string? selectedFile;
-    
-    // Recording fields
-    private bool isRecording = false;
-    private string? recordedFileName;
-    private string? recordedAudioData;
 
-    protected override async Task OnInitializedAsync()
-    {
-        await RefreshVoicesAsync();
-    }
-
-    private async Task RefreshVoicesAsync()
-    {
-        isLoadingVoices = true;
-        try
-        {
-            AppLogger.Instance.Log("Chatterbox.razor", "RefreshVoicesAsync called");
-            voices = await ChatterboxService.ListVoicesAsync();
-            AppLogger.Instance.Log("Chatterbox.razor", $"Successfully loaded {voices.Count} voices");
-        }
-        catch (Exception ex)
-        {
-            AppLogger.Instance.LogError("Chatterbox.razor", "Error in RefreshVoicesAsync", ex);
-            synthesisMessage = $"Error loading voices: {ex.Message}";
-            synthesisSuccess = false;
-        }
-        finally
-        {
-            isLoadingVoices = false;
-        }
-    }
-
-    private void SelectVoice(string voiceId)
+    private async Task HandleVoiceSelect(string voiceId)
     {
         selectedVoiceId = voiceId;
-        voiceMode = "clone";
-    }
-
-    private async Task HandleSelectVoice(string voiceId)
-    {
-        SelectVoice(voiceId);
+        StateHasChanged();
         await Task.CompletedTask;
     }
 
-    private async Task HandleDeleteVoice(string voiceId)
+    private async Task HandleVoiceIdChanged(string voiceId)
     {
-        await DeleteVoiceAsync(voiceId);
+        selectedVoiceId = voiceId;
+        StateHasChanged();
+        await Task.CompletedTask;
     }
 
-    private async Task SynthesizeAsync()
+    private async Task HandleVoicesChanged()
     {
-        if (string.IsNullOrWhiteSpace(textToSynthesize)) return;
-
-        isSynthesizing = true;
-        synthesisMessage = null;
-        audioData = null;
-
-        try
-        {
-            audioData = await ChatterboxService.SynthesizeAsync(
-                text: textToSynthesize,
-                voiceMode: voiceMode,
-                voiceName: voiceMode == "default" ? defaultVoiceName : null,
-                voiceId: voiceMode == "clone" ? selectedVoiceId : null
-            );
-
-            synthesisMessage = $"Successfully synthesized {audioData.Length} bytes of audio!";
-            synthesisSuccess = true;
-
-            // Force UI update first, then play audio
-            StateHasChanged();
-            await Task.Delay(200); // Wait for DOM to render the audio element
-            await PlayAudioAsync(audioData);
-        }
-        catch (Exception ex)
-        {
-            synthesisMessage = $"Error: {ex.Message}";
-            synthesisSuccess = false;
-        }
-        finally
-        {
-            isSynthesizing = false;
-        }
+        // Voices list was updated, refresh the reference
+        StateHasChanged();
+        await Task.CompletedTask;
     }
 
-    private async Task PlayAudioAsync(byte[] audio)
+    private async Task HandleUploadComplete()
     {
-        try
-        {
-            var base64 = Convert.ToBase64String(audio);
-            await JS.InvokeVoidAsync("playWAVAudio", base64);
-        }
-        catch (Exception ex)
-        {
-            synthesisMessage = $"Error playing audio: {ex.Message}";
-            synthesisSuccess = false;
-        }
-    }
-
-    private void OnFileSelected(Microsoft.AspNetCore.Components.Forms.InputFileChangeEventArgs e)
-    {
-        selectedFile = e.File.Name;
-    }
-
-    private async Task UploadVoiceAsync()
-    {
-        if (string.IsNullOrWhiteSpace(newVoiceId)) return;
-        if (selectedFile == null && recordedAudioData == null) return;
-
-        isUploading = true;
-        uploadMessage = null;
-
-        try
-        {
-            UploadResult result;
-            
-            if (recordedAudioData != null)
-            {
-                // Upload from recorded audio (base64)
-                result = await ChatterboxService.UploadVoiceFromBase64Async(newVoiceId, recordedAudioData, sampleRate);
-            }
-            else
-            {
-                // Upload from file
-                result = await ChatterboxService.UploadVoiceAsync(newVoiceId, selectedFile!, sampleRate);
-            }
-
-            uploadSuccess = result.Success;
-            uploadMessage = result.Message;
-
-            if (result.Success)
-            {
-                newVoiceId = "";
-                selectedFile = null;
-                recordedAudioData = null;
-                recordedFileName = null;
-                await RefreshVoicesAsync();
-            }
-        }
-        catch (Exception ex)
-        {
-            uploadMessage = $"Error: {ex.Message}";
-            uploadSuccess = false;
-        }
-        finally
-        {
-            isUploading = false;
-        }
-    }
-
-    private async Task DeleteVoiceAsync(string voiceId)
-    {
-        if (!await JS.InvokeAsync<bool>("confirm", $"Are you sure you want to delete voice '{voiceId}'?"))
-            return;
-
-        try
-        {
-            var result = await ChatterboxService.DeleteVoiceAsync(voiceId);
-            if (result.Success)
-            {
-                if (selectedVoiceId == voiceId)
-                    selectedVoiceId = null;
-                await RefreshVoicesAsync();
-            }
-            else
-            {
-                await JS.InvokeVoidAsync("alert", result.Message);
-            }
-        }
-        catch (Exception ex)
-        {
-            await JS.InvokeVoidAsync("alert", $"Error: {ex.Message}");
-        }
-    }
-
-    private async Task StartRecordingAsync()
-    {
-        try
-        {
-            var success = await JS.InvokeAsync<bool>("startRecording");
-            if (success)
-            {
-                isRecording = true;
-                recordedFileName = null;
-                recordedAudioData = null;
-                selectedFile = null; // Clear file selection
-            }
-            else
-            {
-                await JS.InvokeVoidAsync("alert", "Failed to start recording. Please allow microphone access.");
-            }
-        }
-        catch (Exception ex)
-        {
-            await JS.InvokeVoidAsync("alert", $"Error starting recording: {ex.Message}");
-        }
-    }
-
-    private async Task StopRecordingAsync()
-    {
-        try
-        {
-            recordedAudioData = await JS.InvokeAsync<string>("stopRecording");
-            isRecording = false;
-            
-            if (!string.IsNullOrWhiteSpace(recordedAudioData))
-            {
-                recordedFileName = $"recorded_{DateTime.Now:yyyyMMdd_HHmmss}.wav";
-            }
-            else
-            {
-                await JS.InvokeVoidAsync("alert", "Recording failed or was empty.");
-            }
-        }
-        catch (Exception ex)
-        {
-            isRecording = false;
-            await JS.InvokeVoidAsync("alert", $"Error stopping recording: {ex.Message}");
-        }
-    }
-
-    private async Task DownloadAudioAsync()
-    {
-        if (audioData == null || audioData.Length == 0) return;
-
-        try
-        {
-            var base64 = Convert.ToBase64String(audioData);
-            var fileName = $"tts_audio_{DateTime.Now:yyyyMMdd_HHmmss}.wav";
-            await JS.InvokeVoidAsync("downloadAudio", base64, fileName);
-        }
-        catch (Exception ex)
-        {
-            await JS.InvokeVoidAsync("alert", $"Error downloading audio: {ex.Message}");
-        }
+        // Trigger voices refresh - the VoiceList component handles this internally
+        StateHasChanged();
+        await Task.CompletedTask;
     }
 }

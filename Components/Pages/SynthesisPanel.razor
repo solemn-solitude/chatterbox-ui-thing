@@ -1,0 +1,250 @@
+@using chatterbox_ui.Services
+@using ChatterboxInference.Client.Models
+@inject ChatterboxService ChatterboxService
+@inject IJSRuntime JS
+
+<div class="card">
+    <div class="card-header">
+        <h5 class="mb-0">Text-to-Speech Synthesis</h5>
+    </div>
+    <div class="card-body">
+        <div class="mb-3">
+            <label class="form-label">Text to Synthesize</label>
+            <textarea class="form-control" rows="4" @bind="textToSynthesize" placeholder="Enter text here..."></textarea>
+        </div>
+        
+        <div class="row mb-3">
+            <div class="col-md-6">
+                <label class="form-label">Voice Mode</label>
+                <select class="form-select" @bind="voiceMode">
+                    <option value="default">Default Voice</option>
+                    <option value="cloned">Clone Voice</option>
+                </select>
+            </div>
+            <div class="col-md-6">
+                @if (voiceMode == "default")
+                {
+                    <label class="form-label">Default Voice</label>
+                    <select class="form-select" @bind="defaultVoiceName">
+                        <option value="af_sky">af_sky</option>
+                        <option value="af">af</option>
+                        <option value="am">am</option>
+                        <option value="bf">bf</option>
+                        <option value="bm">bm</option>
+                        <option value="sora">sora</option>
+                    </select>
+                }
+                else
+                {
+                    <label class="form-label">Cloned Voice</label>
+                    <select class="form-select" @bind="SelectedVoiceId">
+                        <option value="">-- Select a voice --</option>
+                        @foreach (var voice in Voices)
+                        {
+                            <option value="@voice.VoiceId">@voice.VoiceId</option>
+                        }
+                    </select>
+                }
+            </div>
+        </div>
+
+        <!-- Advanced Settings -->
+        <div class="card bg-light mb-3">
+            <div class="card-body">
+                <h6 class="mb-3">Advanced Settings</h6>
+                
+                <div class="mb-3">
+                    <label class="form-label">Speed: @speed.ToString("F2")</label>
+                    <input type="range" class="form-range" min="0.5" max="2.0" step="0.1" @bind="speed" @bind:event="oninput" />
+                    <small class="text-muted">0.5 = Slow, 1.0 = Normal, 2.0 = Fast</small>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Exaggeration: @exaggeration.ToString("F2")</label>
+                    <input type="range" class="form-range" min="0" max="1" step="0.05" @bind="exaggeration" @bind:event="oninput" />
+                    <small class="text-muted">Controls expressiveness (0.0 - 1.0)</small>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">CFG Weight: @cfgWeight.ToString("F2")</label>
+                    <input type="range" class="form-range" min="0" max="1" step="0.05" @bind="cfgWeight" @bind:event="oninput" />
+                    <small class="text-muted">Classifier-free guidance (0.0 - 1.0)</small>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Temperature: @temperature.ToString("F2")</label>
+                    <input type="range" class="form-range" min="0.1" max="1.5" step="0.1" @bind="temperature" @bind:event="oninput" />
+                    <small class="text-muted">Sampling variability (0.1 - 1.5)</small>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Repetition Penalty: @repetitionPenalty.ToString("F2")</label>
+                    <input type="range" class="form-range" min="1.0" max="2.0" step="0.1" @bind="repetitionPenalty" @bind:event="oninput" />
+                    <small class="text-muted">Penalty for repetitive tokens (1.0 - 2.0)</small>
+                </div>
+            </div>
+        </div>
+
+        <button class="btn btn-primary btn-lg w-100" @onclick="SynthesizeAsync" disabled="@(isSynthesizing || string.IsNullOrWhiteSpace(textToSynthesize))">
+            @if (isSynthesizing)
+            {
+                <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                <span> Synthesizing...</span>
+            }
+            else
+            {
+                <i class="bi bi-play-circle"></i>
+                <span> Synthesize & Play</span>
+            }
+        </button>
+
+        @if (!string.IsNullOrWhiteSpace(synthesisMessage))
+        {
+            <div class="alert @(synthesisSuccess ? "alert-success" : "alert-danger") mt-3" role="alert">
+                @synthesisMessage
+            </div>
+        }
+
+        @if (audioData != null && audioData.Length > 0)
+        {
+            <div class="mt-3">
+                <div class="card bg-light">
+                    <div class="card-body">
+                        <h6><i class="bi bi-music-note-beamed"></i> Audio Ready</h6>
+                        <p class="mb-2">Size: @((audioData.Length / 1024.0).ToString("F2")) KB</p>
+                        <audio id="audioPlayer" controls class="w-100 mb-3">
+                            Your browser does not support the audio element.
+                        </audio>
+                        <button class="btn btn-success w-100" @onclick="DownloadAudioAsync">
+                            <i class="bi bi-download"></i> Download Audio
+                        </button>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public List<chatterbox_ui.Services.VoiceInfo> Voices { get; set; } = new();
+
+    [Parameter]
+    public string? SelectedVoiceId { get; set; }
+
+    [Parameter]
+    public EventCallback<string> OnVoiceIdChanged { get; set; }
+
+    private string textToSynthesize = "Hello, this is a test of the Chatterbox text to speech system.";
+    private string voiceMode = "cloned";
+    private string defaultVoiceName = "sora";
+    private byte[]? audioData;
+    
+    private bool isSynthesizing = false;
+    private string? synthesisMessage;
+    private bool synthesisSuccess = false;
+
+    // Voice configuration parameters
+    private float speed = 1.0f;
+    private float exaggeration = 0.15f;
+    private float cfgWeight = 1.0f;
+    private float temperature = 0.8f;
+    private float repetitionPenalty = 1.2f;
+
+    protected override void OnParametersSet()
+    {
+        // Auto-select default voice if in cloned mode and none selected
+        if (voiceMode == "cloned" && string.IsNullOrWhiteSpace(SelectedVoiceId) && Voices.Any())
+        {
+            // Try to find "sora" voice first
+            var soraVoice = Voices.FirstOrDefault(v => v.VoiceId.Equals("sora", StringComparison.OrdinalIgnoreCase));
+            if (soraVoice != null)
+            {
+                SelectedVoiceId = soraVoice.VoiceId;
+                OnVoiceIdChanged.InvokeAsync(SelectedVoiceId);
+            }
+            else
+            {
+                // Otherwise pick the first voice
+                SelectedVoiceId = Voices.First().VoiceId;
+                OnVoiceIdChanged.InvokeAsync(SelectedVoiceId);
+            }
+        }
+    }
+
+    private async Task SynthesizeAsync()
+    {
+        if (string.IsNullOrWhiteSpace(textToSynthesize)) return;
+
+        isSynthesizing = true;
+        synthesisMessage = null;
+        audioData = null;
+
+        try
+        {
+            var voiceConfig = new VoiceConfig
+            {
+                VoiceName = voiceMode == "default" ? defaultVoiceName : null,
+                VoiceId = voiceMode == "cloned" ? SelectedVoiceId : null,
+                Speed = speed,
+                Exaggeration = exaggeration,
+                CfgWeight = cfgWeight,
+                Temperature = temperature,
+                RepetitionPenalty = repetitionPenalty
+            };
+
+            audioData = await ChatterboxService.SynthesizeAsync(
+                text: textToSynthesize,
+                voiceMode: voiceMode,
+                voiceConfig: voiceConfig
+            );
+
+            synthesisMessage = $"Successfully synthesized {audioData.Length} bytes of audio!";
+            synthesisSuccess = true;
+
+            // Force UI update first, then play audio
+            StateHasChanged();
+            await Task.Delay(200); // Wait for DOM to render the audio element
+            await PlayAudioAsync(audioData);
+        }
+        catch (Exception ex)
+        {
+            synthesisMessage = $"Error: {ex.Message}";
+            synthesisSuccess = false;
+        }
+        finally
+        {
+            isSynthesizing = false;
+        }
+    }
+
+    private async Task PlayAudioAsync(byte[] audio)
+    {
+        try
+        {
+            var base64 = Convert.ToBase64String(audio);
+            await JS.InvokeVoidAsync("playWAVAudio", base64);
+        }
+        catch (Exception ex)
+        {
+            synthesisMessage = $"Error playing audio: {ex.Message}";
+            synthesisSuccess = false;
+        }
+    }
+
+    private async Task DownloadAudioAsync()
+    {
+        if (audioData == null || audioData.Length == 0) return;
+
+        try
+        {
+            var base64 = Convert.ToBase64String(audioData);
+            var fileName = $"tts_audio_{DateTime.Now:yyyyMMdd_HHmmss}.wav";
+            await JS.InvokeVoidAsync("downloadAudio", base64, fileName);
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("alert", $"Error downloading audio: {ex.Message}");
+        }
+    }
+}

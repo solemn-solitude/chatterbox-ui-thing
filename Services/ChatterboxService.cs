@@ -66,22 +66,20 @@ public class ChatterboxService : IDisposable
     public async Task<byte[]> SynthesizeAsync(
         string text,
         string voiceMode = "default",
-        string? voiceName = null,
-        string? voiceId = null
+        VoiceConfig? voiceConfig = null
     )
     {
         return await Task.Run(() =>
         {
-            AppLogger.Instance.Log("ChatterboxService", $"Starting synthesis: mode={voiceMode}, voiceName={voiceName}, voiceId={voiceId}");
+            AppLogger.Instance.Log("ChatterboxService", $"Starting synthesis: mode={voiceMode}");
             
             var audioData = new List<byte>();
             foreach (
                 var chunk in _client.Synthesize(
                     text: text,
                     voiceMode: voiceMode,
-                    voiceName: voiceName,
-                    voiceId: voiceId
-                    // audioFormat defaults to "wav" in HTTPClient
+                    voiceConfig: voiceConfig,
+                    audioFormat: "wav"
                 )
             )
             {

@@ -1,0 +1,177 @@
+@using chatterbox_ui.Services
+@inject ChatterboxService ChatterboxService
+@inject IJSRuntime JS
+
+<div class="card">
+    <div class="card-header">
+        <h5 class="mb-0">Upload Voice</h5>
+    </div>
+    <div class="card-body">
+        <div class="mb-3">
+            <label class="form-label">Voice ID</label>
+            <input type="text" class="form-control" @bind="newVoiceId" placeholder="my-voice" />
+        </div>
+        <div class="mb-3">
+            <label class="form-label">Audio File (WAV)</label>
+            <div class="input-group">
+                <InputFile class="form-control" accept=".wav" OnChange="OnFileSelected" />
+                @if (!isRecording)
+                {
+                    <button class="btn btn-outline-danger" type="button" @onclick="StartRecordingAsync">
+                        <i class="bi bi-mic-fill"></i> Record
+                    </button>
+                }
+                else
+                {
+                    <button class="btn btn-danger" type="button" @onclick="StopRecordingAsync">
+                        <i class="bi bi-stop-circle-fill"></i> Stop
+                    </button>
+                }
+            </div>
+            @if (isRecording)
+            {
+                <small class="text-danger"><i class="bi bi-record-circle-fill"></i> Recording...</small>
+            }
+            @if (!string.IsNullOrWhiteSpace(recordedFileName))
+            {
+                <small class="text-success"><i class="bi bi-check-circle-fill"></i> Recorded: @recordedFileName</small>
+            }
+        </div>
+        <div class="mb-3">
+            <label class="form-label">Sample Rate</label>
+            <input type="number" class="form-control" @bind="sampleRate" placeholder="24000" />
+        </div>
+        <button class="btn btn-success w-100" @onclick="UploadVoiceAsync" disabled="@(isUploading || string.IsNullOrWhiteSpace(newVoiceId) || (selectedFile == null && recordedAudioData == null))">
+            @if (isUploading)
+            {
+                <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                <span> Uploading...</span>
+            }
+            else
+            {
+                <i class="bi bi-upload"></i>
+                <span> Upload Voice</span>
+            }
+        </button>
+        @if (!string.IsNullOrWhiteSpace(uploadMessage))
+        {
+            <div class="alert @(uploadSuccess ? "alert-success" : "alert-danger") mt-2" role="alert">
+                @uploadMessage
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public EventCallback OnUploadComplete { get; set; }
+
+    private string newVoiceId = "";
+    private int sampleRate = 24000;
+    private string? selectedFile;
+    private bool isUploading = false;
+    private string? uploadMessage;
+    private bool uploadSuccess = false;
+
+    // Recording fields
+    private bool isRecording = false;
+    private string? recordedFileName;
+    private string? recordedAudioData;
+
+    private void OnFileSelected(Microsoft.AspNetCore.Components.Forms.InputFileChangeEventArgs e)
+    {
+        selectedFile = e.File.Name;
+    }
+
+    private async Task UploadVoiceAsync()
+    {
+        if (string.IsNullOrWhiteSpace(newVoiceId)) return;
+        if (selectedFile == null && recordedAudioData == null) return;
+
+        isUploading = true;
+        uploadMessage = null;
+
+        try
+        {
+            UploadResult result;
+            
+            if (recordedAudioData != null)
+            {
+                // Upload from recorded audio (base64)
+                result = await ChatterboxService.UploadVoiceFromBase64Async(newVoiceId, recordedAudioData, sampleRate);
+            }
+            else
+            {
+                // Upload from file
+                result = await ChatterboxService.UploadVoiceAsync(newVoiceId, selectedFile!, sampleRate);
+            }
+
+            uploadSuccess = result.Success;
+            uploadMessage = result.Message;
+
+            if (result.Success)
+            {
+                newVoiceId = "";
+                selectedFile = null;
+                recordedAudioData = null;
+                recordedFileName = null;
+                await OnUploadComplete.InvokeAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            uploadMessage = $"Error: {ex.Message}";
+            uploadSuccess = false;
+        }
+        finally
+        {
+            isUploading = false;
+        }
+    }
+
+    private async Task StartRecordingAsync()
+    {
+        try
+        {
+            var success = await JS.InvokeAsync<bool>("startRecording");
+            if (success)
+            {
+                isRecording = true;
+                recordedFileName = null;
+                recordedAudioData = null;
+                selectedFile = null; // Clear file selection
+            }
+            else
+            {
+                await JS.InvokeVoidAsync("alert", "Failed to start recording. Please allow microphone access.");
+            }
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("alert", $"Error starting recording: {ex.Message}");
+        }
+    }
+
+    private async Task StopRecordingAsync()
+    {
+        try
+        {
+            recordedAudioData = await JS.InvokeAsync<string>("stopRecording");
+            isRecording = false;
+            
+            if (!string.IsNullOrWhiteSpace(recordedAudioData))
+            {
+                recordedFileName = $"recorded_{DateTime.Now:yyyyMMdd_HHmmss}.wav";
+            }
+            else
+            {
+                await JS.InvokeVoidAsync("alert", "Recording failed or was empty.");
+            }
+        }
+        catch (Exception ex)
+        {
+            isRecording = false;
+            await JS.InvokeVoidAsync("alert", $"Error stopping recording: {ex.Message}");
+        }
+    }
+}
