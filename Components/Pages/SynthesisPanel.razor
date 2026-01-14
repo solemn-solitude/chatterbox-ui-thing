@@ -18,7 +18,7 @@
                 <label class="form-label">Voice Mode</label>
                 <select class="form-select" @bind="voiceMode">
                     <option value="default">Default Voice</option>
-                    <option value="cloned">Clone Voice</option>
+                    <option value="clone">Clone Voice</option>
                 </select>
             </div>
             <div class="col-md-6">
@@ -55,31 +55,31 @@
                 
                 <div class="mb-3">
                     <label class="form-label">Speed: @speed.ToString("F2")</label>
-                    <input type="range" class="form-range" min="0.5" max="2.0" step="0.1" @bind="speed" @bind:event="oninput" />
+                    <input type="range" class="form-range" min="0.5" max="2.0" step="0.01" @bind="speed" @bind:event="oninput" />
                     <small class="text-muted">0.5 = Slow, 1.0 = Normal, 2.0 = Fast</small>
                 </div>
 
                 <div class="mb-3">
                     <label class="form-label">Exaggeration: @exaggeration.ToString("F2")</label>
-                    <input type="range" class="form-range" min="0" max="1" step="0.05" @bind="exaggeration" @bind:event="oninput" />
+                    <input type="range" class="form-range" min="0" max="1" step="0.01" @bind="exaggeration" @bind:event="oninput" />
                     <small class="text-muted">Controls expressiveness (0.0 - 1.0)</small>
                 </div>
 
                 <div class="mb-3">
                     <label class="form-label">CFG Weight: @cfgWeight.ToString("F2")</label>
-                    <input type="range" class="form-range" min="0" max="1" step="0.05" @bind="cfgWeight" @bind:event="oninput" />
+                    <input type="range" class="form-range" min="0" max="1" step="0.01" @bind="cfgWeight" @bind:event="oninput" />
                     <small class="text-muted">Classifier-free guidance (0.0 - 1.0)</small>
                 </div>
 
                 <div class="mb-3">
                     <label class="form-label">Temperature: @temperature.ToString("F2")</label>
-                    <input type="range" class="form-range" min="0.1" max="1.5" step="0.1" @bind="temperature" @bind:event="oninput" />
+                    <input type="range" class="form-range" min="0.1" max="1.5" step="0.01" @bind="temperature" @bind:event="oninput" />
                     <small class="text-muted">Sampling variability (0.1 - 1.5)</small>
                 </div>
 
                 <div class="mb-3">
                     <label class="form-label">Repetition Penalty: @repetitionPenalty.ToString("F2")</label>
-                    <input type="range" class="form-range" min="1.0" max="2.0" step="0.1" @bind="repetitionPenalty" @bind:event="oninput" />
+                    <input type="range" class="form-range" min="1.0" max="2.0" step="0.01" @bind="repetitionPenalty" @bind:event="oninput" />
                     <small class="text-muted">Penalty for repetitive tokens (1.0 - 2.0)</small>
                 </div>
             </div>
@@ -136,7 +136,7 @@
     public EventCallback<string> OnVoiceIdChanged { get; set; }
 
     private string textToSynthesize = "Hello, this is a test of the Chatterbox text to speech system.";
-    private string voiceMode = "cloned";
+    private string voiceMode = "clone";
     private string defaultVoiceName = "sora";
     private byte[]? audioData;
     
@@ -153,8 +153,8 @@
 
     protected override void OnParametersSet()
     {
-        // Auto-select default voice if in cloned mode and none selected
-        if (voiceMode == "cloned" && string.IsNullOrWhiteSpace(SelectedVoiceId) && Voices.Any())
+        // Auto-select default voice if in clone mode and none selected
+        if (voiceMode == "clone" && string.IsNullOrWhiteSpace(SelectedVoiceId) && Voices.Any())
         {
             // Try to find "sora" voice first
             var soraVoice = Voices.FirstOrDefault(v => v.VoiceId.Equals("sora", StringComparison.OrdinalIgnoreCase));
@@ -185,7 +185,7 @@
             var voiceConfig = new VoiceConfig
             {
                 VoiceName = voiceMode == "default" ? defaultVoiceName : null,
-                VoiceId = voiceMode == "cloned" ? SelectedVoiceId : null,
+                VoiceId = voiceMode == "clone" ? SelectedVoiceId : null,
                 Speed = speed,
                 Exaggeration = exaggeration,
                 CfgWeight = cfgWeight,

@@ -15,7 +15,8 @@
                 Voices="@voices" 
                 SelectedVoiceId="@selectedVoiceId"
                 OnVoiceSelect="@HandleVoiceSelect"
-                OnVoicesChanged="@HandleVoicesChanged" />
+                OnVoicesChanged="@HandleVoicesChanged"
+                OnRefreshRequested="@RefreshVoicesAsync" />
             
             <div class="mt-3">
                 <VoiceUpload OnUploadComplete="@HandleUploadComplete" />
@@ -35,6 +36,26 @@
 @code {
     private List<chatterbox_ui.Services.VoiceInfo> voices = new();
     private string? selectedVoiceId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshVoicesAsync();
+    }
+
+    private async Task RefreshVoicesAsync()
+    {
+        try
+        {
+            AppLogger.Instance.Log("Chatterbox", "RefreshVoicesAsync called");
+            voices = await ChatterboxService.ListVoicesAsync();
+            AppLogger.Instance.Log("Chatterbox", $"Successfully loaded {voices.Count} voices");
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            AppLogger.Instance.LogError("Chatterbox", "Error in RefreshVoicesAsync", ex);
+        }
+    }
 
     private async Task HandleVoiceSelect(string voiceId)
     {
@@ -59,8 +80,7 @@
 
     private async Task HandleUploadComplete()
     {
-        // Trigger voices refresh - the VoiceList component handles this internally
-        StateHasChanged();
-        await Task.CompletedTask;
+        // Trigger voices refresh after upload
+        await RefreshVoicesAsync();
     }
 }

@@ -58,6 +58,9 @@
     [Parameter]
     public EventCallback OnVoicesChanged { get; set; }
 
+    [Parameter]
+    public EventCallback OnRefreshRequested { get; set; }
+
     private bool isLoadingVoices = false;
 
     protected override async Task OnInitializedAsync()
@@ -68,12 +71,12 @@
     private async Task RefreshVoicesAsync()
     {
         isLoadingVoices = true;
+        StateHasChanged();
+        
         try
         {
-            AppLogger.Instance.Log("VoiceList", "RefreshVoicesAsync called");
-            Voices = await ChatterboxService.ListVoicesAsync();
-            AppLogger.Instance.Log("VoiceList", $"Successfully loaded {Voices.Count} voices");
-            await OnVoicesChanged.InvokeAsync();
+            AppLogger.Instance.Log("VoiceList", "RefreshVoicesAsync - requesting refresh from parent");
+            await OnRefreshRequested.InvokeAsync();
         }
         catch (Exception ex)
         {
